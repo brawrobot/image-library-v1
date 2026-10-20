@@ -71,7 +71,7 @@ sign_in() {
     local id; id=$(curl -s "http://localhost:8025/api/v1/messages" | jq -r --arg e "$email" \
       '[.messages[] | select(any(.To[]; (.Address|ascii_downcase) == $e))][0].ID // empty')
     if [ -n "$id" ]; then
-      link=$(curl -s "http://localhost:8025/api/v1/message/$id" | jq -r .Text | grep -oE 'https?://[^ ]*callback/nodemailer[^ ]*' | head -1)
+      link=$(curl -s "http://localhost:8025/api/v1/message/$id" | jq -r .Text | tr -d '\r' | grep -oE 'https?://[^ ]*callback/nodemailer[^ ]*' | head -1)
       break
     fi
     sleep 1
