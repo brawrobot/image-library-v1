@@ -1,0 +1,30 @@
+{
+  "name": "@il/auth",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/auth.ts",
+    "./permissions": "./src/permissions.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@auth/prisma-adapter": "^2.10.0",
+    "@il/config": "workspace:*",
+    "@il/db": "workspace:*",
+    "next-auth": "^5.0.0-beta.29",
+    "nodemailer": "^6.10.0"
+  },
+  "peerDependencies": {
+    "next": "*",
+    "react": "*"
+  },
+  "devDependencies": {
+    "next": "^16.0.0",
+    "react": "^19.2.0",
+    "vitest": "^3.2.0"
+  }
+}

@@ -1,0 +1,227 @@
+// Control-plane database (`platform`). The source of truth for the schema is
+// migrations/control/*.sql; this file must describe the same tables so the
+// client is typed correctly. `pnpm db:drift` fails CI if they disagree.
+
+generator client {
+  provider   = "prisma-client-js"
+  output     = "../../node_modules/@il-generated/control"
+  engineType = "client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("CONTROL_DATABASE_URL")
+}
+
+model Tenant {
+  id            String    @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  slug          String    @unique
+  name          String
+  status        String    @default("provisioning")
+  theme         Json      @default("{}")
+  settings      Json      @default("{}")
+  dbRef         String?   @map("db_ref")
+  schemaVersion Int       @default(0) @map("schema_version")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  deletedAt     DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  domains     Domain[]
+  roles       Role[]
+  memberships Membership[]
+  invitations Invitation[]
+
+  @@map("tenants")
+}
+
+model Domain {
+  id                String    @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  tenantId          String    @map("tenant_id") @db.Uuid
+  hostname          String    @unique
+  verificationToken String    @map("verification_token")
+  verifiedAt        DateTime? @map("verified_at") @db.Timestamptz(6)
+  isPrimary         Boolean   @default(false) @map("is_primary")
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("domains")
+}
+
+model User {
+  id            String    @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  email         String    @unique
+  emailVerified DateTime? @map("email_verified") @db.Timestamptz(6)
+  name          String?
+  image         String?   @map("avatar_url")
+  isSuperAdmin  Boolean   @default(false) @map("is_super_admin")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  accounts      Account[]
+  sessions      Session[]
+  memberships   Membership[]
+  handoffTokens HandoffToken[]
+
+  @@map("users")
+}
+
+// Field names below are the ones the Auth.js Prisma adapter expects.
+model Account {
+  id                String  @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  userId            String  @map("user_id") @db.Uuid
+  type              String
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  sessionToken String   @unique @map("session_token")
+  userId       String   @map("user_id") @db.Uuid
+  expires      DateTime @db.Timestamptz(6)
+  host         String?
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime @db.Timestamptz(6)
+
+  @@id([identifier, token])
+  @@map("verification_tokens")
+}
+
+model HandoffToken {
+  tokenHash  String    @id @map("token_hash")
+  userId     String    @map("user_id") @db.Uuid
+  targetHost String    @map("target_host")
+  returnTo   String    @default("/") @map("return_to")
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(6)
+  usedAt     DateTime? @map("used_at") @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("handoff_tokens")
+}
+
+model Role {
+  id          String   @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  name        String
+  permissions String[] @default([])
+  isSystem    Boolean  @default(false) @map("is_system")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  memberships Membership[]
+  invitations Invitation[]
+
+  @@unique([tenantId, name])
+  @@unique([id, tenantId])
+  @@map("roles")
+}
+
+model Membership {
+  id        String   @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  roleId    String   @map("role_id") @db.Uuid
+  status    String   @default("invited")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@unique([tenantId, userId])
+  @@index([userId])
+  @@map("memberships")
+}
+
+model Invitation {
+  id         String    @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  tenantId   String    @map("tenant_id") @db.Uuid
+  email      String
+  roleId     String    @map("role_id") @db.Uuid
+  tokenHash  String    @unique @map("token_hash")
+  invitedBy  String?   @map("invited_by") @db.Uuid
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(6)
+  acceptedAt DateTime? @map("accepted_at") @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("invitations")
+}
+
+model AuditLog {
+  id        String   @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  tenantId  String?  @map("tenant_id") @db.Uuid
+  actorId   String?  @map("actor_id") @db.Uuid
+  action    String
+  target    String?
+  metadata  Json     @default("{}")
+  ip        String?  @db.Inet
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([tenantId, createdAt])
+  @@map("audit_log")
+}
+
+model Job {
+  id        String   @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  tenantId  String?  @map("tenant_id") @db.Uuid
+  type      String
+  payload   Json     @default("{}")
+  status    String   @default("queued")
+  attempts  Int      @default(0)
+  error     String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([status, createdAt])
+  @@map("jobs")
+}
+
+model Secret {
+  name      String   @id
+  valueEnc  String   @map("value_enc")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@map("secrets")
+}
+
+model SchemaMigration {
+  version   Int      @id
+  name      String
+  checksum  String
+  appliedAt DateTime @default(now()) @map("applied_at") @db.Timestamptz(6)
+
+  @@map("schema_migrations")
+}

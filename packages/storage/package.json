@@ -1,0 +1,17 @@
+{
+  "name": "@il/storage",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/keys.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@il/config": "workspace:*",
+    "vitest": "^3.2.0"
+  }
+}

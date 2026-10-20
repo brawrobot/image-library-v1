@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-retries 30
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+
+    env:
+      ROOT_DOMAIN: yourapp.test
+      PUBLIC_PROTOCOL: https
+      CONTROL_DATABASE_URL: postgresql://platform_app:platform_app@localhost:5432/platform
+      PROVISIONER_DATABASE_URL: postgresql://provisioner:provisioner@localhost:5432/platform
+      OPS_DATABASE_PASSWORD: platform_ops
+      TENANT_DB_HOST: localhost:5432
+      REDIS_URL: redis://localhost:6379
+      SECRETS_KEY: 6b0f3c1d2e4a5968778695a4b3c2d1e0f0e1d2c3b4a5968778695a4b3c2d1e0f
+      AUTH_SECRET: ci-only-secret-not-used-anywhere-else
+      NEXT_TELEMETRY_DISABLED: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install
+        run: |
+          if [ -f pnpm-lock.yaml ]; then pnpm install --frozen-lockfile; else pnpm install --no-frozen-lockfile; fi
+
+      - name: Upload lockfile
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pnpm-lock
+          path: pnpm-lock.yaml
+          if-no-files-found: ignore
+
+      - name: Bootstrap Postgres roles and control-plane database
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            -v provisioner_pw=provisioner -v app_pw=platform_app -v ops_pw=platform_ops \
+            -f infra/postgres/bootstrap.sql
+
+      - name: Migrate
+        run: pnpm db:migrate
+
+      - name: Prisma schemas match SQL migrations
+        run: pnpm db:drift
+
+      - name: Type-check
+        run: pnpm typecheck
+
+      - name: Tests (unit + cross-tenant leak tests)
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build

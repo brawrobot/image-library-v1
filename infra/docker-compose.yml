@@ -1,0 +1,77 @@
+# Local stack: Postgres, PgBouncer, Redis, MinIO (S3) and Mailpit (email).
+#   pnpm stack:up
+# Then copy .env.example to .env, and run `pnpm db:migrate`.
+name: image-library
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      PROVISIONER_PASSWORD: provisioner
+      PLATFORM_APP_PASSWORD: platform_app
+      PLATFORM_OPS_PASSWORD: platform_ops
+    ports: ["5432:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/00-bootstrap.sh:/docker-entrypoint-initdb.d/00-bootstrap.sh:ro
+      - ./postgres/bootstrap.sql:/bootstrap/bootstrap.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      retries: 30
+
+  # Transaction pooling in front of Postgres so hundreds of tenant databases
+  # share a bounded number of server connections. Point TENANT_DB_HOST at
+  # localhost:6432 to route tenant traffic through it.
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      AUTH_TYPE: scram-sha-256
+      AUTH_USER: postgres
+      AUTH_QUERY: SELECT usename, passwd FROM pg_shadow WHERE usename=$$1
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: "2000"
+      DEFAULT_POOL_SIZE: "5"
+      # No DB_NAME: the image writes a wildcard entry, so every tenant database
+      # name is forwarded to the postgres service.
+    ports: ["6432:5432"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  redis:
+    image: redis:7
+    ports: ["6379:6379"]
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio-secret
+    ports: ["9000:9000", "9001:9001"]
+    volumes:
+      - miniodata:/data
+
+  minio-setup:
+    image: minio/mc:latest
+    depends_on: [minio]
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://minio:9000 minio minio-secret; do sleep 1; done;
+      mc mb --ignore-existing local/image-library;
+      "
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports: ["1025:1025", "8025:8025"]
+
+volumes:
+  pgdata:
+  miniodata:
