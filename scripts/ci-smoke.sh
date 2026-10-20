@@ -60,14 +60,27 @@ sign_in() {
   rm -f "$jar"
   curl -s "${R[@]}" -c "$jar" -b "$jar" "$AUTH/api/auth/csrf" > /tmp/csrf.json
   local csrf; csrf=$(jq -r .csrfToken /tmp/csrf.json)
-  curl -s "${R[@]}" -c "$jar" -b "$jar" -o /dev/null \
+  local post
+  post=$(curl -s "${R[@]}" -c "$jar" -b "$jar" -o /tmp/signin.body -w '%{http_code} %{redirect_url}' \
     --data-urlencode "email=$email" --data-urlencode "csrfToken=$csrf" \
     --data-urlencode "callbackUrl=$AUTH/handoff?to=$(jq -rn --arg u "$dest" '$u|@uri')" \
-    "$AUTH/api/auth/signin/nodemailer"
-  sleep 1
-  local id; id=$(curl -s "http://localhost:8025/api/v1/search?query=to:$email" | jq -r '.messages[0].ID')
-  local link; link=$(curl -s "http://localhost:8025/api/v1/message/$id" | jq -r .Text | grep -o 'http://auth[^ ]*callback/nodemailer[^ ]*' | head -1)
-  if [ -z "$link" ]; then echo "::error title=Smoke: magic link for $email::no sign-in email found"; fail=1; return; fi
+    "$AUTH/api/auth/signin/nodemailer")
+  echo "::notice title=Smoke debug: sign-in POST for $email::$post"
+  local link=""
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    local id; id=$(curl -s "http://localhost:8025/api/v1/messages" | jq -r --arg e "$email" \
+      '[.messages[] | select(any(.To[]; (.Address|ascii_downcase) == $e))][0].ID // empty')
+    if [ -n "$id" ]; then
+      link=$(curl -s "http://localhost:8025/api/v1/message/$id" | jq -r .Text | grep -oE 'https?://[^ ]*callback/nodemailer[^ ]*' | head -1)
+      break
+    fi
+    sleep 1
+  done
+  if [ -z "$link" ]; then
+    echo "::error title=Smoke: magic link for $email::no sign-in email. Mailpit has $(curl -s http://localhost:8025/api/v1/messages | jq -c '[.messages[] | {to: [.To[].Address], subject: .Subject}]' | head -c 400)"
+    fail=1; return
+  fi
+  echo "::notice title=Smoke debug: magic link host::$(echo "$link" | cut -d/ -f3)"
   curl -s "${R[@]}" -c "$jar" -b "$jar" -L -o /tmp/smoke.final "$link"
 }
 

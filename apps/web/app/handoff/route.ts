@@ -26,9 +26,11 @@ export async function GET(request: NextRequest) {
 
   const session = await auth();
   if (!session?.user?.id) {
-    const signIn = new URL("/api/auth/signin", request.nextUrl);
-    signIn.searchParams.set("callbackUrl", request.nextUrl.toString());
-    return NextResponse.redirect(signIn, 303);
+    // Build from the browser's Host header: request.nextUrl carries the server's
+    // own listen address (e.g. localhost:3000), not the platform host.
+    const origin = `${protocol()}://${request.headers.get("host")}`;
+    const back = `${origin}${request.nextUrl.pathname}${request.nextUrl.search}`;
+    return NextResponse.redirect(`${origin}/api/auth/signin?callbackUrl=${encodeURIComponent(back)}`, 303);
   }
 
   const token = await createHandoff(getControlDb(), {
