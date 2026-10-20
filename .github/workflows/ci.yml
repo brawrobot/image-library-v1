@@ -44,16 +44,17 @@ jobs:
       NEXT_TELEMETRY_DISABLED: "1"
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # The branch head (not the PR merge commit), so a generated lockfile can be pushed back.
           ref: ${{ github.head_ref || github.ref }}
 
       - uses: pnpm/action-setup@v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
+          cache: pnpm
 
       - name: Install
         run: |
@@ -100,3 +101,11 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      - name: Smoke test host resolution through the built app
+        run: |
+          pnpm db:seed
+          pnpm tenant:create --slug frozen --name Frozen --owner owner@frozen.test --direct
+          pnpm --filter @il/web start > web.log 2>&1 &
+          for i in $(seq 1 60); do curl -s -o /dev/null http://127.0.0.1:3000/ && break; sleep 1; done
+          bash scripts/ci-smoke.sh || { echo "::error title=web.log::$(tail -c 1500 web.log | tr '\n' ' ')"; exit 1; }

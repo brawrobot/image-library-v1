@@ -8,3 +8,4 @@ coverage/
 .env.local
 test-results.json
 drift.log
+web.log
