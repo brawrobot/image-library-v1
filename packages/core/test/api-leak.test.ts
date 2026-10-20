@@ -17,6 +17,9 @@ import { createTenant, tenantAdminDepsFromEnv } from "../src/admin.ts";
 const haveDb = Boolean(
   process.env.PROVISIONER_DATABASE_URL && process.env.CONTROL_DATABASE_URL && process.env.SECRETS_KEY && process.env.TENANT_DB_HOST,
 );
+if (process.env.REQUIRE_DB_TESTS && !haveDb) {
+  throw new Error("REQUIRE_DB_TESTS is set but the database environment variables are missing");
+}
 
 type Fixture = Partial<Record<ResourceKind, string>>;
 interface Side {

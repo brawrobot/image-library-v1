@@ -25,6 +25,9 @@ const env = {
   opsPassword: process.env.OPS_DATABASE_PASSWORD ?? "platform_ops",
 };
 const haveDb = Boolean(env.provisionerUrl && env.controlUrl && env.tenantDbHost && env.secretsKey);
+if (process.env.REQUIRE_DB_TESTS && !haveDb) {
+  throw new Error("REQUIRE_DB_TESTS is set but the database environment variables are missing");
+}
 
 async function query<T extends Record<string, unknown>>(url: string, sql: string, params: unknown[] = []) {
   const client = new pg.Client({ connectionString: url });

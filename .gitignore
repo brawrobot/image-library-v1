@@ -6,3 +6,5 @@ coverage/
 *.tsbuildinfo
 .env
 .env.local
+test-results.json
+drift.log

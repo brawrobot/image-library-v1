@@ -23,6 +23,9 @@ describe("validateSlug", () => {
 });
 
 const haveDb = Boolean(process.env.PROVISIONER_DATABASE_URL && process.env.CONTROL_DATABASE_URL && process.env.SECRETS_KEY);
+if (process.env.REQUIRE_DB_TESTS && !haveDb) {
+  throw new Error("REQUIRE_DB_TESTS is set but the database environment variables are missing");
+}
 
 describe.skipIf(!haveDb)("tenant lifecycle", () => {
   const deps = haveDb ? tenantAdminDepsFromEnv() : (undefined as never);
