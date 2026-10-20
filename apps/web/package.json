@@ -10,6 +10,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@il-generated/control": "link:../../packages/db/node_modules/@il-generated/control",
+    "@il-generated/tenant": "link:../../packages/db/node_modules/@il-generated/tenant",
     "@il/auth": "workspace:*",
     "@il/config": "workspace:*",
     "@il/core": "workspace:*",

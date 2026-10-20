@@ -20,6 +20,12 @@ importers:
 
   apps/web:
     dependencies:
+      '@il-generated/control':
+        specifier: link:../../packages/db/node_modules/@il-generated/control
+        version: link:../../packages/db/node_modules/@il-generated/control
+      '@il-generated/tenant':
+        specifier: link:../../packages/db/node_modules/@il-generated/tenant
+        version: link:../../packages/db/node_modules/@il-generated/tenant
       '@il/auth':
         specifier: workspace:*
         version: link:../../packages/auth
