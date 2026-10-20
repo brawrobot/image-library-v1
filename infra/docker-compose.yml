@@ -1,4 +1,5 @@
-# Local stack: Postgres, PgBouncer, Redis, MinIO (S3) and Mailpit (email).
+# Local stack: Postgres, PgBouncer, Redis and Mailpit (email).
+# Object storage joins in Phase 1 (MinIO no longer publishes images on Docker Hub).
 #   pnpm stack:up
 # Then copy .env.example to .env, and run `pnpm db:migrate`.
 name: image-library
@@ -49,29 +50,9 @@ services:
     image: redis:7
     ports: ["6379:6379"]
 
-  minio:
-    image: minio/minio:latest
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: minio
-      MINIO_ROOT_PASSWORD: minio-secret
-    ports: ["9000:9000", "9001:9001"]
-    volumes:
-      - miniodata:/data
-
-  minio-setup:
-    image: minio/mc:latest
-    depends_on: [minio]
-    entrypoint: >
-      /bin/sh -c "
-      until mc alias set local http://minio:9000 minio minio-secret; do sleep 1; done;
-      mc mb --ignore-existing local/image-library;
-      "
-
   mailpit:
     image: axllent/mailpit:latest
     ports: ["1025:1025", "8025:8025"]
 
 volumes:
   pgdata:
-  miniodata:

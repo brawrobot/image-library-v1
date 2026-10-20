@@ -17,7 +17,7 @@ packages/
   auth/       Auth.js config, permissions and can()
   core/       host resolution, routing, sessions + cross-host hand-off, tenant API, tenant lifecycle
   storage/    object-storage key helpers (S3 client lands with uploads in Phase 1)
-infra/        docker-compose (Postgres, PgBouncer, Redis, MinIO, Mailpit), Postgres bootstrap
+infra/        docker-compose (Postgres, PgBouncer, Redis, Mailpit), Postgres bootstrap
 ```
 
 ## How tenancy works
@@ -51,7 +51,7 @@ Needs Node 22.12+, pnpm 10 and Docker.
 ```sh
 pnpm install
 cp .env.example .env
-pnpm stack:up            # Postgres (bootstrapped on first start), PgBouncer, Redis, MinIO, Mailpit
+pnpm stack:up            # Postgres (bootstrapped on first start), PgBouncer, Redis, Mailpit
 pnpm db:migrate          # control plane, then every tenant database
 pnpm db:seed             # tenants acme + globex, super-admin admin@lvh.me
 pnpm dev
