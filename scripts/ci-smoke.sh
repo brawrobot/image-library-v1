@@ -81,7 +81,17 @@ sign_in() {
     fail=1; return
   fi
   echo "::notice title=Smoke debug: magic link host::$(echo "$link" | cut -d/ -f3)"
-  curl -s "${R[@]}" -c "$jar" -b "$jar" -L -o /tmp/smoke.final "$link"
+  # Follow redirects by hand so every hop is visible.
+  local url=$link hops="" i
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    local out; out=$(curl -s "${R[@]}" -c "$jar" -b "$jar" -o /tmp/smoke.final -w '%{http_code} %{redirect_url}' "$url")
+    hops="$hops | ${out%% *} $(echo "$url" | cut -c1-90)"
+    local next=${out#* }
+    [ -z "$next" ] || [ "$next" = "$out" ] && break
+    url=$next
+  done
+  echo "::notice title=Smoke debug: hops for $email::$hops"
+  echo "::notice title=Smoke debug: cookies for $email::$(grep -v '^#' "$jar" | awk 'NF>=7 {print $1"="$6}' | tr '\n' ' ')"
 }
 
 sign_in owner@acme.test http://acme.yourapp.test:3000/ /tmp/acme.jar
