@@ -49,5 +49,37 @@ check "hand-off refuses foreign destinations"  400 ""                   -H "Host
 check "suspended tenant shows suspended page"  403 "suspended"          -H "Host: frozen.yourapp.test" "$BASE/"
 check "suspended tenant's API is closed"       403 "suspended"          -H "Host: frozen.yourapp.test" "$BASE/api/v1/me"
 
+# ── Real sign-in: magic link via Mailpit, hand-off to the tenant and admin hosts ──
+R=(--resolve auth.yourapp.test:3000:127.0.0.1 --resolve acme.yourapp.test:3000:127.0.0.1
+   --resolve globex.yourapp.test:3000:127.0.0.1 --resolve admin.yourapp.test:3000:127.0.0.1)
+AUTH=http://auth.yourapp.test:3000
+
+# sign_in <email> <destination URL> <cookie jar>: runs the whole flow, leaves the jar signed in on the destination.
+sign_in() {
+  local email=$1 dest=$2 jar=$3
+  rm -f "$jar"
+  curl -s "${R[@]}" -c "$jar" -b "$jar" "$AUTH/api/auth/csrf" > /tmp/csrf.json
+  local csrf; csrf=$(jq -r .csrfToken /tmp/csrf.json)
+  curl -s "${R[@]}" -c "$jar" -b "$jar" -o /dev/null \
+    --data-urlencode "email=$email" --data-urlencode "csrfToken=$csrf" \
+    --data-urlencode "callbackUrl=$AUTH/handoff?to=$(jq -rn --arg u "$dest" '$u|@uri')" \
+    "$AUTH/api/auth/signin/nodemailer"
+  sleep 1
+  local id; id=$(curl -s "http://localhost:8025/api/v1/search?query=to:$email" | jq -r '.messages[0].ID')
+  local link; link=$(curl -s "http://localhost:8025/api/v1/message/$id" | jq -r .Text | grep -o 'http://auth[^ ]*callback/nodemailer[^ ]*' | head -1)
+  if [ -z "$link" ]; then echo "::error title=Smoke: magic link for $email::no sign-in email found"; fail=1; return; fi
+  curl -s "${R[@]}" -c "$jar" -b "$jar" -L -o /tmp/smoke.final "$link"
+}
+
+sign_in owner@acme.test http://acme.yourapp.test:3000/ /tmp/acme.jar
+check "magic-link sign-in lands on acme as Owner" 200 "Signed in as" "${R[@]}" -b /tmp/acme.jar http://acme.yourapp.test:3000/
+grep -q "Owner" /tmp/smoke.body || { echo "::error title=Smoke: acme role::page doesn't show Owner"; fail=1; }
+check "signed-in API call on acme"                200 '"role":"Owner"' "${R[@]}" -b /tmp/acme.jar http://acme.yourapp.test:3000/api/v1/me
+check "acme session isn't valid on globex"        200 ">Sign in<"      "${R[@]}" -b /tmp/acme.jar http://globex.yourapp.test:3000/
+
+sign_in admin@lvh.me http://admin.yourapp.test:3000/ /tmp/admin.jar
+check "super-admin sees the admin console"        200 "Platform admin" "${R[@]}" -b /tmp/admin.jar http://admin.yourapp.test:3000/
+check "tenant owner is refused the console"       200 "Not allowed"    "${R[@]}" -b /tmp/acme.jar -c /tmp/acme2.jar http://admin.yourapp.test:3000/ -L
+
 echo "::notice title=Smoke tests::${passed} passed$([ $fail -ne 0 ] && echo ', some failed')"
 exit $fail

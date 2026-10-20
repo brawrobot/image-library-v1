@@ -30,10 +30,15 @@ jobs:
       redis:
         image: redis:7
         ports: ["6379:6379"]
+      mailpit:
+        image: axllent/mailpit:latest
+        ports: ["1025:1025", "8025:8025"]
 
     env:
-      ROOT_DOMAIN: yourapp.test
-      PUBLIC_PROTOCOL: https
+      ROOT_DOMAIN: yourapp.test:3000
+      PUBLIC_PROTOCOL: http
+      EMAIL_SERVER: smtp://localhost:1025
+      EMAIL_FROM: Image Library <no-reply@yourapp.test>
       CONTROL_DATABASE_URL: postgresql://platform_app:platform_app@localhost:5432/platform
       PROVISIONER_DATABASE_URL: postgresql://provisioner:provisioner@localhost:5432/platform
       OPS_DATABASE_PASSWORD: platform_ops
