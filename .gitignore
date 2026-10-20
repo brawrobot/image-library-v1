@@ -1,0 +1,11 @@
+node_modules/
+.next/
+dist/
+.turbo/
+coverage/
+*.tsbuildinfo
+.env
+.env.local
+test-results.json
+drift.log
+web.log

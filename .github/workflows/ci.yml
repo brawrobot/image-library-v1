@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-retries 30
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+      mailpit:
+        image: axllent/mailpit:latest
+        ports: ["1025:1025", "8025:8025"]
+
+    env:
+      ROOT_DOMAIN: yourapp.test:3000
+      PUBLIC_PROTOCOL: http
+      EMAIL_SERVER: smtp://localhost:1025
+      EMAIL_FROM: Image Library <no-reply@yourapp.test>
+      CONTROL_DATABASE_URL: postgresql://platform_app:platform_app@localhost:5432/platform
+      PROVISIONER_DATABASE_URL: postgresql://provisioner:provisioner@localhost:5432/platform
+      OPS_DATABASE_PASSWORD: platform_ops
+      TENANT_DB_HOST: localhost:5432
+      REDIS_URL: redis://localhost:6379
+      SECRETS_KEY: 6b0f3c1d2e4a5968778695a4b3c2d1e0f0e1d2c3b4a5968778695a4b3c2d1e0f
+      AUTH_SECRET: ci-only-secret-not-used-anywhere-else
+      NEXT_TELEMETRY_DISABLED: "1"
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # The branch head (not the PR merge commit), so a generated lockfile can be pushed back.
+          ref: ${{ github.head_ref || github.ref }}
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: |
+          if [ -f pnpm-lock.yaml ]; then pnpm install --frozen-lockfile; else pnpm install --no-frozen-lockfile; fi
+
+      # First runs on a branch without a lockfile commit the generated one back.
+      - name: Commit generated lockfile
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          if [ -n "$(git status --porcelain pnpm-lock.yaml)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add pnpm-lock.yaml
+            git commit -m "Add pnpm lockfile generated in CI"
+            git push origin "HEAD:${{ github.head_ref }}"
+            echo "::notice title=Lockfile::Committed pnpm-lock.yaml to ${{ github.head_ref }}"
+          fi
+
+      - name: Bootstrap Postgres roles and control-plane database
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            -v provisioner_pw=provisioner -v app_pw=platform_app -v ops_pw=platform_ops \
+            -f infra/postgres/bootstrap.sql
+
+      - name: Migrate
+        run: pnpm db:migrate
+
+      - name: Prisma schemas match SQL migrations
+        run: pnpm db:drift 2>&1 | tee drift.log; s=${PIPESTATUS[0]}; [ $s -eq 0 ] || echo "::error title=Prisma drift::$(tr '\n' ' ' < drift.log | cut -c1-1500)"; exit $s
+
+      - name: Type-check
+        run: pnpm typecheck
+
+      - name: Tests (unit + cross-tenant leak tests)
+        env:
+          REQUIRE_DB_TESTS: "1"
+        run: pnpm turbo run test -- --reporter=default --reporter=json --outputFile.json=test-results.json
+
+      - name: Test summary
+        if: always()
+        run: node scripts/ci-test-summary.mjs
+
+      - name: Build
+        run: pnpm build
+
+      - name: Smoke test host resolution through the built app
+        run: |
+          pnpm db:seed
+          pnpm tenant:create --slug frozen --name Frozen --owner owner@frozen.test --direct
+          pnpm --filter @il/web start > web.log 2>&1 &
+          for i in $(seq 1 60); do curl -s -o /dev/null http://127.0.0.1:3000/ && break; sleep 1; done
+          bash scripts/ci-smoke.sh || { echo "::error title=web.log::$(tail -c 1500 web.log | tr '\n' ' ')"; exit 1; }

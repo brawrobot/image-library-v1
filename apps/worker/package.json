@@ -1,0 +1,17 @@
+{
+  "name": "@il/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --env-file-if-exists=../../.env src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@il/config": "workspace:*",
+    "@il/core": "workspace:*",
+    "bullmq": "^5.56.0",
+    "tsx": "^4.20.0"
+  }
+}

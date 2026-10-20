@@ -1,0 +1,31 @@
+{
+  "name": "@il/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./admin": "./src/admin.ts"
+  },
+  "scripts": {
+    "generate": "prisma generate --schema prisma/control/schema.prisma && prisma generate --schema prisma/tenant/schema.prisma",
+    "postinstall": "pnpm run generate",
+    "migrate": "tsx --env-file-if-exists=../../.env scripts/migrate.ts",
+    "drift": "tsx --env-file-if-exists=../../.env scripts/drift.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@il/config": "workspace:*",
+    "@prisma/adapter-pg": "^6.16.0",
+    "@prisma/client": "^6.16.0",
+    "lru-cache": "^11.1.0",
+    "pg": "^8.16.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.15.0",
+    "prisma": "^6.16.0",
+    "tsx": "^4.20.0",
+    "vitest": "^3.2.0"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "name": "image-library",
+  "private": true,
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "db:generate": "pnpm --filter @il/db generate",
+    "db:migrate": "pnpm --filter @il/db migrate",
+    "db:drift": "pnpm --filter @il/db drift",
+    "db:seed": "pnpm --filter @il/core seed",
+    "tenant:create": "pnpm --filter @il/core tenant:create",
+    "stack:up": "docker compose -f infra/docker-compose.yml up -d",
+    "stack:down": "docker compose -f infra/docker-compose.yml down"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "turbo": "^2.5.0",
+    "typescript": "^5.9.0"
+  }
+}
